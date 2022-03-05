@@ -1,0 +1,99 @@
+importScripts('lib/tank.js');
+
+// Don't know where to start?
+// Read Getting Started in "Docs" section 
+
+tank.init(function(settings, info) {
+	// initialize tank here
+  turnDirection = Math.random() < 0.5 ? 1 : -1;
+  
+});
+let bulletSpeed = 4;
+let lastDistance = 0;
+let turnTimer;
+
+tank.loop(function(state, control) {
+  
+  if(state.collisions.wall) {
+    turnTimer = Math.round(Math.randomRange(20, 50));
+    
+  }
+  
+  if(turnTimer > 0) {
+    turnTimer--;
+    control.THROTTLE = 0;
+    control.TURN = turnDirection;
+  }
+  else if(!state.radar.enemy) {
+  	control.RADAR_TURN = 1;
+    //control.THROTTLE = 1;
+    control.THROTTLE = 1;
+    control.TURN = 0;
+  }else{
+  // you've got him!
+    let enemy = state.radar.enemy;
+    let targetX = enemy.x;
+    let targetY = enemy.y;
+    let targetDistance = Math.distance(state.x, state.y, targetX, targetY); //Linal distance
+    let targetAngle = Math.deg.atan2(targetY - state.y, targetX - state.x); //Body angle
+    let realTargetAngle = Math.deg.normalize(targetAngle - state.angle); //Aiming angle
+    
+    //Aim radar at enemy
+  	let radarAngleDiff = Math.deg.normalize(realTargetAngle - state.radar.angle);
+  	control.RADAR_TURN = 0.3 * radarAngleDiff;
+    
+    //Turn at enemy
+    let bodyAngleDiff = Math.deg.normalize(targetAngle - state.angle);
+  	control.TURN = 0.3 * bodyAngleDiff;
+    
+    //Predictive Aimming
+    let bulletTime = targetDistance / bulletSpeed;
+    //Calculate position after bullet time
+    let deltaTargetX = targetX + bulletTime * enemy.speed * Math.cos(Math.deg2rad(enemy.angle));
+		let deltaTargetY = targetY + bulletTime * enemy.speed * Math.sin(Math.deg2rad(enemy.angle));
+    //Aim at predicted place
+    let predictedTargetAngle = Math.deg.atan2(deltaTargetY - state.y, deltaTargetX - state.x);
+		let predictedGunAngle = Math.deg.normalize(predictedTargetAngle - state.angle);
+		let angleDiff = Math.deg.normalize(predictedGunAngle - state.gun.angle);
+		control.GUN_TURN = 0.3 * angleDiff;
+    
+    //Move towards enemy (PD regulator)
+    let standoff = 150;
+  	let distanceDiff = targetDistance - standoff;
+    let deltaDistance = distanceDiff - lastDistance;
+    let P_reg = 100;
+    let D_reg = 10;
+  
+  	control.THROTTLE = P_reg*distanceDiff - D_reg*deltaDistance;
+    if(targetDistance > 170 || targetDistance < 100){
+      	control.BOOST = 1;
+    }else{
+      control.BOOST = 0;
+    }
+    lastDistance = distanceDiff;
+    
+    //Shoot
+    let shootDamage;
+    let maxShotDist = 160;
+    let minShotDist = 180;
+    let m = -0.9 / (minShotDist - maxShotDist);
+    let n = 1 - m * maxShotDist;
+    if(Math.abs(angleDiff) < 3) {
+  		shootDamage = (m * targetDistance) + n;
+      //shootSpeed = -0.006 * targetDistance + 1.9; //Maximiza daño cuando está cerca
+      if(shootDamage < 0.1){
+      	shootDamage = 0.1;
+      }
+      control.SHOOT =  shootDamage;
+		}
+    
+    //Debug
+    control.DEBUG = {Throttle:P_reg*distanceDiff + D_reg*deltaDistance, 
+                     EnemyDistance:targetDistance,
+                     ShotSpeed:shootDamage,
+                     m:m,
+                     n:n}
+    
+  }
+  
+});
