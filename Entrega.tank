@@ -6,6 +6,7 @@ importScripts('lib/tank.js');
 tank.init(function(settings, info) {
 	// initialize tank here
   turnDirection = Math.random() < 0.5 ? 1 : -1;
+  settings.SKIN = 'lava';
   
 });
 let bulletSpeed = 4;
